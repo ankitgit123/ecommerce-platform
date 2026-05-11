@@ -3,7 +3,7 @@ name: Deploy Payment Service Lambda
 on:
   push:
     branches:
-      - main
+      - master
 
     paths:
       - 'services/payment-service/**'
