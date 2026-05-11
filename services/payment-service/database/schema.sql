@@ -1,0 +1,25 @@
+CREATE TABLE IF NOT EXISTS payments(
+id INT AUTO_INCREMENT PRIMARY KEY,
+user_id VARCHAR(50),
+amount INT,
+currency VARCHAR(10),
+status VARCHAR(50),
+stripe_session_id VARCHAR(255),
+invoice_url VARCHAR(255),
+created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS webhook_events(
+id INT AUTO_INCREMENT PRIMARY KEY,
+event_id VARCHAR(255),
+event_type VARCHAR(255),
+created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS retry_jobs(
+id INT AUTO_INCREMENT PRIMARY KEY,
+payment_id VARCHAR(255),
+job_type VARCHAR(50),
+retry_count INT,
+status VARCHAR(50)
+);

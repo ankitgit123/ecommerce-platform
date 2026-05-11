@@ -1,0 +1,57 @@
+﻿version: "3.9"
+
+services:
+
+mysql:
+
+  image: mysql:8
+
+  container_name: ecommerce-mysql
+
+  env_file:
+    - .env.local
+
+  environment:
+
+    MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+    MYSQL_DATABASE: ${MYSQL_DATABASE}
+
+  ports:
+
+    - "3307:3306"
+
+  volumes:
+
+    - mysql_data:/var/lib/mysql
+    - ./infra/mysql/init:/docker-entrypoint-initdb.d
+
+  healthcheck:
+  
+    test: ["CMD","mysqladmin","ping","-h","localhost"]
+    interval: 10s
+    retries: 5
+
+# auth:
+
+#   build: ./services/auth-service
+
+#   env_file:
+#     - .env.local
+
+#   depends_on:
+#     - mysql
+
+gateway:
+
+  build: ./services/gateway-service
+
+  env_file:
+    - .env.local
+
+  depends_on:
+    - auth
+
+volumes:
+
+mysql_data:

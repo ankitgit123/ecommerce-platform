@@ -1,0 +1,71 @@
+CREATE TABLE IF NOT EXISTS users(
+
+id VARCHAR(50) PRIMARY KEY,
+
+email VARCHAR(100) UNIQUE,
+
+password VARCHAR(255),
+
+created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+);
+
+CREATE TABLE IF NOT EXISTS products(
+
+id VARCHAR(50) PRIMARY KEY,
+
+name VARCHAR(255),
+
+description TEXT,
+
+price INT,
+
+image_url TEXT,
+
+created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+);
+
+CREATE TABLE IF NOT EXISTS orders(
+
+id VARCHAR(50) PRIMARY KEY,
+
+user_id VARCHAR(50),
+
+status VARCHAR(50),
+
+total INT,
+
+created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+);
+
+CREATE TABLE IF NOT EXISTS order_items(
+
+id VARCHAR(50),
+
+order_id VARCHAR(50),
+
+product_id VARCHAR(50),
+
+quantity INT,
+
+price INT
+
+);
+
+CREATE TABLE IF NOT EXISTS payments(
+
+id VARCHAR(50),
+
+order_id VARCHAR(50),
+
+stripe_id VARCHAR(255),
+
+amount INT,
+
+status VARCHAR(50),
+
+created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+);
