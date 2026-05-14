@@ -3,6 +3,15 @@ require("module-alias/register");
 const { verifyPayment } = require("../controllers/paymentController");
 
 exports.handler = async (event) => {
+
+  console.log({
+    version: process.env.APP_VERSION,
+    branch: process.env.GIT_BRANCH,
+    environment: process.env.ENVIRONMENT,
+  });
+
+  console.log(process.env.APP_VERSION);
+
   try {
     const body = JSON.parse(event.body || "{}");
 
