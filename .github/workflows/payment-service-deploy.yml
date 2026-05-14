@@ -52,6 +52,11 @@ jobs:
           --image-uri \
           ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
 
+      - name: Wait For Lambda Update
+        run: |
+          aws lambda wait function-updated \
+          --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }}
+
       - name: Update Lambda Metadata
         run: |
           aws lambda update-function-configuration \
