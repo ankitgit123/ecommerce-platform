@@ -101,15 +101,15 @@ async function createPayment(body) {
 
 // 🟡 VERIFY PAYMENT
 async function verifyPayment(body) {
+  const pool = await getPool();
+
+  const {
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature,
+  } = body;
+
   try {
-    const pool = await getPool();
-
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-    } = body;
-
     if (
       !razorpay_order_id ||
       !razorpay_payment_id ||
@@ -127,19 +127,48 @@ async function verifyPayment(body) {
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    if (generatedSignature !== razorpay_signature) {
+    const signatureVerified =
+      generatedSignature === razorpay_signature;
+
+    // Save failed verification attempt
+    if (!signatureVerified) {
+
+      await pool.execute(
+        `UPDATE payments
+         SET signature_verified = ?,
+             raw_response = ?,
+             retry_count = retry_count + 1,
+             failure_reason = ?
+         WHERE razorpay_order_id = ?`,
+        [
+          false,
+          JSON.stringify(body),
+          "Invalid payment signature",
+          razorpay_order_id,
+        ]
+      );
+
       const err = new Error("Invalid payment signature");
       err.statusCode = 400;
       throw err;
     }
 
+    // Success update
     await pool.execute(
       `UPDATE payments
        SET payment_status = 'CAPTURED',
-           razorpay_payment_id = ?
+           razorpay_payment_id = ?,
+           signature_verified = ?,
+           raw_response = ?,
+           failure_reason = NULL
        WHERE razorpay_order_id = ?
        AND payment_status != 'CAPTURED'`,
-      [razorpay_payment_id, razorpay_order_id]
+      [
+        razorpay_payment_id,
+        true,
+        JSON.stringify(body),
+        razorpay_order_id,
+      ]
     );
 
     await pool.execute(
@@ -150,10 +179,34 @@ async function verifyPayment(body) {
       [razorpay_order_id]
     );
 
-    return { success: true };
+    return {
+      success: true,
+    };
 
   } catch (error) {
+
+    // Save unexpected backend failure
+    if (razorpay_order_id) {
+      try {
+        await pool.execute(
+          `UPDATE payments
+           SET retry_count = retry_count + 1,
+               failure_reason = ?
+           WHERE razorpay_order_id = ?`,
+          [
+            error.message,
+            razorpay_order_id,
+          ]
+        );
+      } catch (dbError) {
+        logger.error(
+          `Failed to update payment failure metadata: ${dbError.message}`
+        );
+      }
+    }
+
     logger.error(`Error verifying payment: ${error.message}`);
+
     throw error;
   }
 }
