@@ -6,6 +6,6 @@ COPY package*.json ./
 
 RUN npm ci --omit=dev
 
-COPY . .
+COPY src ./src
 
 CMD ["src/handlers/createOrderHandler.handler"]

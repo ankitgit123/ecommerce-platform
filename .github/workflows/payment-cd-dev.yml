@@ -1,0 +1,90 @@
+name: Payment Service CD DEV
+
+on:
+  workflow_run:
+    workflows:
+      - Payment Service CI
+    types:
+      - completed
+
+jobs:
+  deploy-dev:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+
+      #################################################
+      # Configure AWS Credentials
+      #################################################
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      #################################################
+      # Deploy payment-service-lambda
+      #################################################
+
+      - name: Deploy Payment Service Lambda
+        run: |
+          aws lambda update-function-code \
+          --function-name payment-service-lambda \
+          --image-uri \
+          ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+
+      - name: Wait Payment Service Lambda
+        run: |
+          aws lambda wait function-updated \
+          --function-name payment-service-lambda
+
+      - name: Update Payment Service Lambda Environment Variables
+        run: |
+          aws lambda update-function-configuration \
+          --function-name payment-service-lambda \
+          --environment "Variables={
+            APP_VERSION=${IMAGE_TAG},
+            ENVIRONMENT=dev,
+            GIT_BRANCH=master
+          }"
+
+      #################################################
+      # Deploy payment-verify-lambda
+      #################################################
+
+      - name: Deploy Payment Verify Lambda
+        run: |
+          aws lambda update-function-code \
+          --function-name payment-verify-lambda \
+          --image-uri \
+          ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+
+      - name: Wait Payment Verify Lambda
+        run: |
+          aws lambda wait function-updated \
+          --function-name payment-verify-lambda
+
+      - name: Update Payment Verify Lambda Environment Variables
+        run: |
+          aws lambda update-function-configuration \
+          --function-name payment-verify-lambda \
+          --environment "Variables={
+            APP_VERSION=${IMAGE_TAG},
+            ENVIRONMENT=dev,
+            GIT_BRANCH=master
+          }"
+
+      #################################################
+      # Deployment Success
+      #################################################
+
+      - name: Deployment Success
+        run: |
+          echo "DEV Deployment Completed"
