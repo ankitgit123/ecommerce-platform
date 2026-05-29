@@ -34,6 +34,13 @@ function verifyWebhookSignature(body, signature, secret) {
 
 const webhookHandler = async (event) => {
 
+  logger.info("WEBHOOK EVENT", {
+    body: event.body,
+    rawBody: event.rawBody,
+    isBase64Encoded: event.isBase64Encoded,
+    headers: event.headers,
+  });
+
   let connection;
 
   let eventId = null;
@@ -73,12 +80,17 @@ const webhookHandler = async (event) => {
       event.headers?.["x-razorpay-signature"] ||
       event.headers?.["X-Razorpay-Signature"];
 
+    logger.info("SIGNATURE", signature);
+
     // ======================================================
     // Load Secrets
     // ======================================================
 
     const secrets = await getSecrets();
-
+    logger.info(
+      "WEBHOOK SECRET EXISTS",
+      !!secrets.RAZORPAY_WEBHOOK_SECRET
+    );
     // ======================================================
     // Verify Signature
     // ======================================================
@@ -88,6 +100,8 @@ const webhookHandler = async (event) => {
       signature,
       secrets.RAZORPAY_WEBHOOK_SECRET
     );
+
+    logger.info("SIGNATURE VALID", isValid);
 
     if (!isValid) {
 
