@@ -82,6 +82,32 @@ jobs:
           }"
 
       #################################################
+      # Deploy payment-webhook-lambda
+      #################################################
+
+      - name: Deploy Payment Webhook Lambda
+        run: |
+          aws lambda update-function-code \
+          --function-name payment-webhook-lambda \
+          --image-uri \
+          ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+
+      - name: Wait Payment Webhook Lambda
+        run: |
+          aws lambda wait function-updated \
+          --function-name payment-webhook-lambda
+
+      - name: Update Payment Webhook Lambda Environment Variables
+        run: |
+          aws lambda update-function-configuration \
+          --function-name payment-webhook-lambda \
+          --environment "Variables={
+            APP_VERSION=${IMAGE_TAG},
+            ENVIRONMENT=dev,
+            GIT_BRANCH=master
+          }"
+
+      #################################################
       # Deployment Success
       #################################################
 
