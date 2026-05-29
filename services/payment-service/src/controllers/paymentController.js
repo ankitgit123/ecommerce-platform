@@ -49,11 +49,21 @@ async function createPayment(body) {
 
       const razorpay = await getRazorpayInstance();
 
+      logger.info("Creating Razorpay order", {
+        amount,
+        currency: "INR",
+      });
+
       const order = await razorpay.orders.create({
         amount: Math.round(amount * 100),
         currency,
         receipt: `rcpt_${Date.now()}`,
         notes: { user_id },
+      });
+
+      logger.info("Order created successfully", {
+        orderId: order.id,
+        amount: order.amount,
       });
 
       if (!order?.id) {
@@ -78,6 +88,7 @@ async function createPayment(body) {
 
       const secrets = await getSecrets();
 
+
       return {
         orderId: order.id,
         amount: order.amount,
@@ -94,7 +105,7 @@ async function createPayment(body) {
     }
 
   } catch (error) {
-    logger.error(`Error creating payment: ${error.message}`);
+    logger.error(`Error creating payment: ${error}`);
     throw error;
   }
 }

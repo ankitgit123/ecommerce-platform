@@ -1,11 +1,18 @@
 const crypto = require("crypto");
+
 const { getPool } = require("../config/db");
 const logger = require("../utils/logger");
 const { getSecrets } = require("../config/secrets");
 
-// 🔐 Signature verification
+// ======================================================
+// Verify Razorpay Webhook Signature
+// ======================================================
+
 function verifyWebhookSignature(body, signature, secret) {
-  if (!signature || !secret) return false;
+
+  if (!signature || !secret) {
+    return false;
+  }
 
   const expectedSignature = crypto
     .createHmac("sha256", secret)
@@ -21,92 +28,179 @@ function verifyWebhookSignature(body, signature, secret) {
   );
 }
 
+// ======================================================
+// Webhook Handler
+// ======================================================
+
 const webhookHandler = async (event) => {
-  // 🔥 1. Handle empty ping
-  if (!event.body || event.body.length === 0) {
-    logger.info("Webhook ping / empty payload received");
-
-    return {
-      statusCode: 200,
-      body: "",
-    };
-  }
-
-  const signature =
-    event.headers?.["x-razorpay-signature"] ||
-    event.headers?.["X-Razorpay-Signature"];
-
-  const rawBody = event.body;
-
-  // 🔐 Load secrets FIRST
-  const secrets = await getSecrets();
-
-  // 🔐 Verify signature
-  const isValid = verifyWebhookSignature(
-    rawBody,
-    signature,
-    secrets.RAZORPAY_WEBHOOK_SECRET
-  );
-
-  if (!isValid) {
-    logger.warn("Invalid Razorpay webhook signature");
-
-    return {
-      statusCode: 400,
-      body: "Invalid signature",
-    };
-  }
-
-  // 🔥 Parse safely
-  let eventData;
-
-  try {
-    eventData = JSON.parse(rawBody.toString());
-
-  } catch (err) {
-    logger.warn("Invalid JSON in webhook");
-
-    return {
-      statusCode: 200,
-      body: "",
-    };
-  }
-
-  const payment = eventData.payload?.payment?.entity || {};
-
-  // 🔥 Safe extraction
-  const eventId =
-    eventData.id ||
-    `evt_${payment.id || "unknown"}_${eventData.created_at || Date.now()}`;
-
-  const eventType = eventData.event || "unknown";
-
-  const razorpayOrderId = payment.order_id ?? null;
-
-  const razorpayPaymentId = payment.id ?? null;
-
-  if (!razorpayOrderId) {
-    logger.warn(`Webhook missing order_id: ${eventId}`);
-
-    return {
-      statusCode: 200,
-      body: "",
-    };
-  }
 
   let connection;
 
+  let eventId = null;
+  let eventType = null;
+  let razorpayOrderId = null;
+  let razorpayPaymentId = null;
+
   try {
-    // ✅ Get pool AFTER secrets loaded
+
+    // ======================================================
+    // Handle Empty Ping
+    // ======================================================
+
+    if (!event.body || event.body.length === 0) {
+
+      logger.info("Webhook ping received");
+
+      return {
+        statusCode: 200,
+        body: "",
+      };
+    }
+
+    // ======================================================
+    // Handle Base64 Body
+    // ======================================================
+
+    const rawBody = event.isBase64Encoded
+      ? Buffer.from(event.body, "base64").toString("utf8")
+      : event.body;
+
+    // ======================================================
+    // Extract Signature
+    // ======================================================
+
+    const signature =
+      event.headers?.["x-razorpay-signature"] ||
+      event.headers?.["X-Razorpay-Signature"];
+
+    // ======================================================
+    // Load Secrets
+    // ======================================================
+
+    const secrets = await getSecrets();
+
+    // ======================================================
+    // Verify Signature
+    // ======================================================
+
+    const isValid = verifyWebhookSignature(
+      rawBody,
+      signature,
+      secrets.RAZORPAY_WEBHOOK_SECRET
+    );
+
+    if (!isValid) {
+
+      logger.warn("Invalid Razorpay webhook signature");
+
+      return {
+        statusCode: 400,
+        body: "Invalid signature",
+      };
+    }
+
+    // ======================================================
+    // Parse Payload
+    // ======================================================
+
+    let eventData;
+
+    try {
+
+      eventData = JSON.parse(rawBody);
+
+    } catch (err) {
+
+      logger.warn("Invalid webhook JSON payload");
+
+      return {
+        statusCode: 400,
+        body: "Invalid JSON payload",
+      };
+    }
+
+    // ======================================================
+    // Extract Payment Entity
+    // ======================================================
+
+    const payment =
+      eventData.payload?.payment?.entity || {};
+
+    eventId =
+      eventData.id ||
+      `evt_${payment.id || "unknown"}_${Date.now()}`;
+
+    eventType =
+      eventData.event || "unknown";
+
+    razorpayOrderId =
+      payment.order_id || null;
+
+    razorpayPaymentId =
+      payment.id || null;
+
+    // ======================================================
+    // Validate Event Type
+    // ======================================================
+
+    const allowedEvents = [
+      "payment.captured",
+      "payment.failed",
+    ];
+
+    if (!allowedEvents.includes(eventType)) {
+
+      logger.info(`Ignoring unsupported webhook event: ${eventType}`);
+
+      return {
+        statusCode: 200,
+        body: "",
+      };
+    }
+
+    // ======================================================
+    // Validate Order ID
+    // ======================================================
+
+    if (!razorpayOrderId) {
+
+      logger.warn(`Webhook missing order_id: ${eventId}`);
+
+      return {
+        statusCode: 400,
+        body: "Missing order_id",
+      };
+    }
+
+    logger.info("Webhook received", {
+      eventId,
+      eventType,
+      razorpayOrderId,
+      razorpayPaymentId,
+    });
+
+    // ======================================================
+    // Get DB Connection
+    // ======================================================
+
     const pool = await getPool();
 
     connection = await pool.getConnection();
 
-    // ✅ STEP 1: INSERT webhook event OUTSIDE transaction
+    // ======================================================
+    // Insert Webhook Event (Idempotency)
+    // ======================================================
+
     const [insertResult] = await connection.execute(
       `
       INSERT IGNORE INTO webhook_events
-      (event_id, event_type, razorpay_order_id, razorpay_payment_id, payload)
+      (
+        event_id,
+        event_type,
+        razorpay_order_id,
+        razorpay_payment_id,
+        payload
+      )
       VALUES (?, ?, ?, ?, ?)
       `,
       [
@@ -118,8 +212,12 @@ const webhookHandler = async (event) => {
       ]
     );
 
-    // 🔁 Duplicate event → ignore safely
+    // ======================================================
+    // Duplicate Event
+    // ======================================================
+
     if (insertResult.affectedRows === 0) {
+
       logger.info(`Duplicate webhook ignored: ${eventId}`);
 
       return {
@@ -128,20 +226,31 @@ const webhookHandler = async (event) => {
       };
     }
 
-    // 🔥 STEP 2: Transaction
+    // ======================================================
+    // Start Transaction
+    // ======================================================
+
     await connection.beginTransaction();
 
-    // 🔥 SUCCESS FLOW
+    // ======================================================
+    // PAYMENT SUCCESS
+    // ======================================================
+
     if (eventType === "payment.captured") {
-      await connection.execute(
+
+      const [orderUpdateResult] = await connection.execute(
         `
         UPDATE orders
         SET status = 'PAID'
         WHERE razorpay_order_id = ?
-        AND status != 'PAID'
+        AND status IN ('CREATED', 'PENDING')
         `,
         [razorpayOrderId]
       );
+
+      if (orderUpdateResult.affectedRows === 0) {
+        throw new Error("Order not found or already paid");
+      }
 
       await connection.execute(
         `
@@ -150,12 +259,21 @@ const webhookHandler = async (event) => {
             razorpay_payment_id = ?
         WHERE razorpay_order_id = ?
         `,
-        [razorpayPaymentId, razorpayOrderId]
+        [
+          razorpayPaymentId,
+          razorpayOrderId,
+        ]
       );
+
+      logger.info(`Payment captured: ${razorpayOrderId}`);
     }
 
-    // 🔥 FAILURE FLOW
+    // ======================================================
+    // PAYMENT FAILURE
+    // ======================================================
+
     if (eventType === "payment.failed") {
+
       await connection.execute(
         `
         UPDATE orders
@@ -178,9 +296,14 @@ const webhookHandler = async (event) => {
           razorpayOrderId,
         ]
       );
+
+      logger.info(`Payment failed: ${razorpayOrderId}`);
     }
 
-    // 🔥 STEP 3: Mark processed
+    // ======================================================
+    // Mark Event Processed
+    // ======================================================
+
     await connection.execute(
       `
       UPDATE webhook_events
@@ -191,21 +314,48 @@ const webhookHandler = async (event) => {
       [eventId]
     );
 
+    // ======================================================
+    // Commit Transaction
+    // ======================================================
+
     await connection.commit();
 
-  } catch (err) {
-    if (connection) {
-      await connection.rollback();
-    }
+    logger.info(`Webhook processed successfully: ${eventId}`);
 
-    logger.error(`Webhook processing failed: ${err.message}`, {
+    return {
+      statusCode: 200,
+      body: "",
+    };
+
+  } catch (err) {
+
+    logger.error("Webhook processing failed", {
+      error: err.message,
       eventId,
       eventType,
       razorpayOrderId,
       razorpayPaymentId,
     });
 
+    // ======================================================
+    // Rollback Transaction
+    // ======================================================
+
+    if (connection) {
+
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        logger.error("Rollback failed", rollbackError);
+      }
+    }
+
+    // ======================================================
+    // Store Error
+    // ======================================================
+
     try {
+
       const pool = await getPool();
 
       await pool.execute(
@@ -214,23 +364,40 @@ const webhookHandler = async (event) => {
         SET error = ?
         WHERE event_id = ?
         `,
-        [err.message || "Unknown error", eventId]
+        [
+          err.message || "Unknown error",
+          eventId,
+        ]
       );
 
-    } catch (e) {
-      logger.error("Failed to update webhook error log", e);
+    } catch (dbError) {
+
+      logger.error(
+        "Failed to update webhook error log",
+        dbError
+      );
     }
 
+    // ======================================================
+    // IMPORTANT:
+    // Return 500 So Razorpay Retries
+    // ======================================================
+
+    return {
+      statusCode: 500,
+      body: "Webhook processing failed",
+    };
+
   } finally {
+
+    // ======================================================
+    // Release Connection
+    // ======================================================
+
     if (connection) {
       connection.release();
     }
   }
-
-  return {
-    statusCode: 200,
-    body: "",
-  };
 };
 
 module.exports = {
