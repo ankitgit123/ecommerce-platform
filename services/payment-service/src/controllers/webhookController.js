@@ -10,18 +10,18 @@ const { getSecrets } = require("../config/secrets");
 
 function verifyWebhookSignature(body, signature, secret) {
 
+  console.log("BODY:", body);
+  console.log("BODY LENGTH:", body?.length);
+  console.log("SIGNATURE:", signature);
+  console.log("SECRET:", secret);
+
   if (!signature || !secret) {
     return false;
   }
 
-  console.log("BODY:", rawBody);
-  console.log("BODY LENGTH:", rawBody?.length);
-  console.log("SIGNATURE:", signature);
-  console.log("SECRET:", secret);
-
   const expectedSignature = crypto
     .createHmac("sha256", secret)
-    .update(rawBody)
+    .update(body)
     .digest("hex");
 
   console.log("EXPECTED:", expectedSignature);
