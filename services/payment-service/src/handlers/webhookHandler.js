@@ -1,3 +1,5 @@
+const { webhookHandler } = require("../controllers/webhookController");
+
 exports.handler = async (event) => {
   try {
     const result = await webhookHandler({
