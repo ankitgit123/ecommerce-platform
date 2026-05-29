@@ -10,10 +10,22 @@ const { getSecrets } = require("../config/secrets");
 
 function verifyWebhookSignature(body, signature, secret) {
 
-  console.log("BODY:", body);
-  console.log("BODY LENGTH:", body?.length);
-  console.log("SIGNATURE:", signature);
-  console.log("SECRET:", secret);
+  console.log("BODY_LENGTH:", body?.length);
+
+  console.log(
+    "BODY_FIRST_500:",
+    body?.substring(0, 500)
+  );
+
+  console.log(
+    "SECRET_LENGTH:",
+    secret?.length
+  );
+
+  console.log(
+    "SIGNATURE_LENGTH:",
+    signature?.length
+  );
 
   if (!signature || !secret) {
     return false;
@@ -21,15 +33,15 @@ function verifyWebhookSignature(body, signature, secret) {
 
   const expectedSignature = crypto
     .createHmac("sha256", secret)
-    .update(body)
+    .update(body, "utf8")
     .digest("hex");
 
   console.log("EXPECTED:", expectedSignature);
   console.log("RECEIVED:", signature);
   console.log("MATCH:", expectedSignature === signature);
 
-  const expected = Buffer.from(expectedSignature);
-  const received = Buffer.from(signature);
+  const expected = Buffer.from(expectedSignature, "utf8");
+  const received = Buffer.from(signature, "utf8");
 
   return (
     expected.length === received.length &&
@@ -82,11 +94,15 @@ const webhookHandler = async (event) => {
     // Extract Signature
     // ======================================================
 
-    const signature =
-      event.headers?.["x-razorpay-signature"] ||
-      event.headers?.["X-Razorpay-Signature"];
+    const headers = {};
 
-    console.log("SIGNATURE", signature);
+    Object.keys(event.headers || {}).forEach((key) => {
+      headers[key.toLowerCase()] = event.headers[key];
+    });
+
+    const signature = headers["x-razorpay-signature"];
+
+    console.log("SIGNATURE:", signature);
 
     // ======================================================
     // Load Secrets

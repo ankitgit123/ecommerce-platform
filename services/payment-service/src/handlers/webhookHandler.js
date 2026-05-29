@@ -8,10 +8,7 @@ exports.handler = async (event) => {
       headers: event.headers || {},
     });
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result || { received: true }),
-    };
+    return result;
   } catch (error) {
     return {
       statusCode: error.statusCode || 500,
