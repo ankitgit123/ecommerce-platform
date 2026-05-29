@@ -14,10 +14,19 @@ function verifyWebhookSignature(body, signature, secret) {
     return false;
   }
 
+  console.log("BODY:", rawBody);
+  console.log("BODY LENGTH:", rawBody?.length);
+  console.log("SIGNATURE:", signature);
+  console.log("SECRET:", secret);
+
   const expectedSignature = crypto
     .createHmac("sha256", secret)
-    .update(body)
+    .update(rawBody)
     .digest("hex");
+
+  console.log("EXPECTED:", expectedSignature);
+  console.log("RECEIVED:", signature);
+  console.log("MATCH:", expectedSignature === signature);
 
   const expected = Buffer.from(expectedSignature);
   const received = Buffer.from(signature);
