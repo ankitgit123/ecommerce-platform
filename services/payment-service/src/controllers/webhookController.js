@@ -34,11 +34,8 @@ function verifyWebhookSignature(body, signature, secret) {
 
 const webhookHandler = async (event) => {
 
-  logger.info("WEBHOOK EVENT", {
-    body: event.body,
-    rawBody: event.rawBody,
-    isBase64Encoded: event.isBase64Encoded,
-    headers: event.headers,
+  console.log("WEBHOOK EVENT", {
+    event
   });
 
   let connection;
@@ -56,7 +53,7 @@ const webhookHandler = async (event) => {
 
     if (!event.body || event.body.length === 0) {
 
-      logger.info("Webhook ping received");
+      console.log("Webhook ping received");
 
       return {
         statusCode: 200,
@@ -80,16 +77,19 @@ const webhookHandler = async (event) => {
       event.headers?.["x-razorpay-signature"] ||
       event.headers?.["X-Razorpay-Signature"];
 
-    logger.info("SIGNATURE", signature);
+    console.log("SIGNATURE", signature);
 
     // ======================================================
     // Load Secrets
     // ======================================================
-
+    console.log(
+      "RAWBODY",
+      rawBody
+    );
     const secrets = await getSecrets();
-    logger.info(
+    console.log(
       "WEBHOOK SECRET EXISTS",
-      !!secrets.RAZORPAY_WEBHOOK_SECRET
+      secrets.RAZORPAY_WEBHOOK_SECRET
     );
     // ======================================================
     // Verify Signature
@@ -101,7 +101,7 @@ const webhookHandler = async (event) => {
       secrets.RAZORPAY_WEBHOOK_SECRET
     );
 
-    logger.info("SIGNATURE VALID", isValid);
+    console.log("SIGNATURE VALID", isValid);
 
     if (!isValid) {
 
@@ -164,7 +164,7 @@ const webhookHandler = async (event) => {
 
     if (!allowedEvents.includes(eventType)) {
 
-      logger.info(`Ignoring unsupported webhook event: ${eventType}`);
+      console.log(`Ignoring unsupported webhook event: ${eventType}`);
 
       return {
         statusCode: 200,
@@ -186,7 +186,7 @@ const webhookHandler = async (event) => {
       };
     }
 
-    logger.info("Webhook received", {
+    console.log("Webhook received", {
       eventId,
       eventType,
       razorpayOrderId,
@@ -232,7 +232,7 @@ const webhookHandler = async (event) => {
 
     if (insertResult.affectedRows === 0) {
 
-      logger.info(`Duplicate webhook ignored: ${eventId}`);
+      console.log(`Duplicate webhook ignored: ${eventId}`);
 
       return {
         statusCode: 200,
@@ -279,7 +279,7 @@ const webhookHandler = async (event) => {
         ]
       );
 
-      logger.info(`Payment captured: ${razorpayOrderId}`);
+      console.log(`Payment captured: ${razorpayOrderId}`);
     }
 
     // ======================================================
@@ -311,7 +311,7 @@ const webhookHandler = async (event) => {
         ]
       );
 
-      logger.info(`Payment failed: ${razorpayOrderId}`);
+      console.log(`Payment failed: ${razorpayOrderId}`);
     }
 
     // ======================================================
@@ -334,7 +334,7 @@ const webhookHandler = async (event) => {
 
     await connection.commit();
 
-    logger.info(`Webhook processed successfully: ${eventId}`);
+    console.log(`Webhook processed successfully: ${eventId}`);
 
     return {
       statusCode: 200,
