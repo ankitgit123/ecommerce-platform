@@ -4,6 +4,6 @@ const raw = require("../middleware/webhookRawBody");
 
 const router = express.Router();
 
-router.post("/", controller.webhookHandler);
+router.post("/payment", controller.webhookHandler);
 
 module.exports = router;
